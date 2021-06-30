@@ -3,7 +3,7 @@ Timit data process for acoustci echo cancellation experiments
 ==============================
 This repo is following the data setup from [Deep Learning for Acoustic Echo Cancellation in Noisy and Double-TalkScenarios](https://www.isca-speech.org/archive/Interspeech_2018/pdfs/1484.pdf).
 
-It' a draft script.
+It' a draft script, I will modify it and put all changeable configurations into a json so that it can be used more friendly.
 
 By the way, if you want to do some work in deep learning aec, I recommend using farend data from AEC-challenge and mix with other clean open source datasets.
 
