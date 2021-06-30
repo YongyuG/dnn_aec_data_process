@@ -528,6 +528,7 @@ def generate_pair_audio(train_dataset, validate_dataset, rir_path, noise_dataset
         validate_farend_speech = np.concatenate([sf.read(wav)[0] for wav in validate_farend_path_sets])
         validate_farend_speech = signal_pad(validate_farend_speech, audio_sample_length)
         samples_rir_ch = get_rir_samples(rir_dict)
+        #TODO: add non-linear function
         validate_reverb_farend, validate_noreverb_farend = add_pyreverb(validate_farend_speech, samples_rir_ch)
 
         #TODO 加噪,但有些部分我有争议, 可能不需要对输入做那么多的归一和scaling这个到时候实验看看
@@ -594,6 +595,7 @@ def generate_pair_audio(train_dataset, validate_dataset, rir_path, noise_dataset
 
             farend_speech = signal_pad(farend_speech, audio_sample_length)
             samples_rir_ch = get_rir_samples(rir_dict)
+            #TODO add non-linear function
             reverb_farend, noreverb_farend = add_pyreverb(farend_speech, samples_rir_ch)
             #noise_sample, noise_sr = sf.read(noise_files[np.random.randint(0, np.size(noise_files))])
             noise_audio, noise_file, noise_cf = build_noise_audio(noise_dataset, fs=sample_rate, audio_length=audio_length, audio_samples_length=-1)
