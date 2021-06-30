@@ -1,5 +1,5 @@
 
-Timit data process for acoustci echo cancellation experiments
+Timit data process for dnn acoustci echo cancellation experiments
 ==============================
 This repo is following the data setup from [Deep Learning for Acoustic Echo Cancellation in Noisy and Double-TalkScenarios](https://www.isca-speech.org/archive/Interspeech_2018/pdfs/1484.pdf).
 
