@@ -1,5 +1,8 @@
 '''
-This process is strictly following experimental data setup from paper:
+Author: Yongyu Gao
+Email: yongyugao@hotmail.com
+
+This script is strictly following experimental data setup from paper:
 
 <<Deep Learning for Acoustic Echo Cancellation in Noisy and Double-Talk Scenarios>>
 
