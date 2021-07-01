@@ -27,4 +27,8 @@ How to use
 
 2. python timit_pre_process.py
 
+Last Modification
+============
 
+1. add json
+2. randomly pad signal to certain length
