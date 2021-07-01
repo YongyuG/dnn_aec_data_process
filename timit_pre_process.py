@@ -1,13 +1,13 @@
 '''
-Author: Yongyu Gao
-Email: yongyugao@hotmail.com
-
-This script is strictly following experimental data setup from paper:
+This process is strictly following experimental data setup from paper:
 
 <<Deep Learning for Acoustic Echo Cancellation in Noisy and Double-Talk Scenarios>>
 
 '''
+
+import argparse
 import glob
+import json
 import librosa
 import os
 import random
@@ -16,12 +16,12 @@ import numpy as np
 from random import shuffle
 import soundfile as sf
 from scipy import signal
-from evaluation import SER
+from metric.evaluation import SER
 
 MAXTRIES = 50
-
-np.random.seed(9999)
-random.seed(9999)
+MAXFILELEN = 50
+# np.random.seed(9999)
+# random.seed(9999)
 EPS = np.finfo(float).eps
 
 def get_single_gender_index_list(data_list, repeat_enable=False, num_pair=30):    #获取不重复的单性别说话人对
@@ -75,8 +75,8 @@ def random_three_nonrepeat_sample(data_len):
 
     return three_sample_list
 
-def add_pyreverb(clean_speech, rir):
-    predelay = 50
+def add_pyreverb(clean_speech, rir, predelay=50):
+    predelay = predelay
     early_delay_samples = (predelay * 16000) // 1000
     early_rir = rir[:early_delay_samples]
 
@@ -90,16 +90,23 @@ def add_pyreverb(clean_speech, rir):
     return reverb_speech, noreverb_speech
 
 def signal_pad(signal, audio_sample_length):
-    if len(signal) < audio_sample_length:  # 设定一个统一的长度,如果长度不够, 则前后补零
-        if len(signal) % 2 == 0:
-            signal = np.pad(signal, ((audio_sample_length - len(signal)) // 2,
-                                                     (audio_sample_length - len(signal)) // 2), 'constant',
-                                    constant_values=(0, 0))
-        elif len(signal) % 2 != 0:
-            signal = np.pad(signal, ((audio_sample_length - len(signal)) // 2,
-                                                     (audio_sample_length - len(signal)) // 2 + len(
-                                                         signal) % 2), 'constant',
-                                    constant_values=(0, 0))  # 无法被2整除则把余数补零至最后
+
+
+
+    # if len(signal) < audio_sample_length:  # 设定一个统一的长度,如果长度不够, 则前后补零
+    #     if len(signal) % 2 == 0:
+    #         signal = np.pad(signal, ((audio_sample_length - len(signal)) // 2,
+    #                                                  (audio_sample_length - len(signal)) // 2), 'constant',
+    #                                 constant_values=(0, 0))
+    #     elif len(signal) % 2 != 0:
+    #         signal = np.pad(signal, ((audio_sample_length - len(signal)) // 2,
+    #                                                  (audio_sample_length - len(signal)) // 2 + len(
+    #                                                      signal) % 2), 'constant',
+    #                                 constant_values=(0, 0))  # 无法被2整除则把余数补零至最后
+    if len(signal) < audio_sample_length:
+        diff_len = audio_sample_length - len(signal)
+        padfront = np.random.randint(diff_len)
+        signal = np.pad(signal, (padfront, diff_len - padfront), 'constant', constant_values=(0, 0))   ##randomly pad in front and end
 
     elif len(signal) >= audio_sample_length:
         signal = signal[:audio_sample_length]
@@ -149,7 +156,11 @@ def generate_gender_wav_pair(nearend_data_list, farend_data_list, data_dict1, da
 
 
 
-def get_data_pair(dataPath, repeat_enable=True, samle_gender_pair=30, diff_gender_pair=40):
+def get_data_pair(
+        dataPath,
+        repeat_enable=True,
+        samle_gender_pair=30,
+        diff_gender_pair=40):
 
     male_dict = {}
     female_dict = {}
@@ -234,7 +245,7 @@ def get_data_pair(dataPath, repeat_enable=True, samle_gender_pair=30, diff_gende
     # res_dict = male_male_final_data
     # return res_dict
 
-def get_rir_dict(rir_csv_path):
+def get_rir_dict(rir_csv_path, conf):
     temp = pd.read_csv(rir_csv_path, skiprows=[1], sep=',', header=None,
                        names=['wavfile', 'channel', 'T60_WB', 'C50_WB', 'isRealRIR'])
     #temp.keys()
@@ -253,8 +264,8 @@ def get_rir_dict(rir_csv_path):
     mychannel = []
     myt60 = []
 
-    lower_t60 = 0.3
-    upper_t60 = 1.3
+    lower_t60 = conf['configs']['lower_t60']
+    upper_t60 = conf['configs']['upper_t60']
 
     all_indices = [i for i, x in enumerate(rir_isreal2)]
 
@@ -304,11 +315,15 @@ def get_noise_files(noise_path):
 def is_clipped(audio, clipping_threshold=0.99):
     return any(abs(audio) > clipping_threshold)
 
-def build_noise_audio(noise_path, fs=16000, audio_length=8, audio_samples_length=-1):
+def build_noise_audio(
+        noise_path,
+        fs=16000,
+        audio_length=8,
+        audio_samples_length=-1,
+        silence_length = 0.2):
     '''Construct an audio signal from source files'''
 
     fs_output = fs
-    silence_length = 0.2
     if audio_samples_length == -1:
         audio_samples_length = int(audio_length*fs)
 
@@ -409,7 +424,7 @@ def active_rms(clean, noise, fs=16000, energy_thresh=-50):
     return clean_rms, noise_rms
 
 
-def segmental_snr_mixer(clean, noise, snr, target_level=-25, clipping_threshold=0.99):
+def segmental_snr_mixer(clean, noise, snr, target_level=-25, clipping_threshold=0.99, target_level_lower=-35, target_level_upper=-15):
     '''Function to mix clean speech and noise at various segmental SNR levels'''
     if len(clean) > len(noise):
         noise = np.append(noise, np.zeros(len(clean)-len(noise)))
@@ -428,7 +443,7 @@ def segmental_snr_mixer(clean, noise, snr, target_level=-25, clipping_threshold=
     noisyspeech = clean + noisenewlevel
     # Randomly select RMS value between -15 dBFS and -35 dBFS and normalize noisyspeech with that value
     # There is a chance of clipping that might happen with very less probability, which is not a major issue.
-    noisy_rms_level = np.random.randint(-35, -15)
+    noisy_rms_level = np.random.randint(target_level_lower, target_level_upper)
     rmsnoisy = (noisyspeech**2).mean()**0.5
     scalarnoisy = 10 ** (noisy_rms_level / 20) / (rmsnoisy+EPS)
     noisyspeech = noisyspeech * scalarnoisy
@@ -478,7 +493,22 @@ The validation data are placed at first 300 fileid
 the remaining file are training sets
 我们数据分布方式根据aec-challenge来,即前N个,在汪德凉老师的paper中为300,是验证集, 剩余的是训练集
 '''
-def generate_pair_audio(train_dataset, validate_dataset, rir_path, noise_dataset, outputPath, use_reverb=True, sample_rate=16000, audio_length=8):
+# def generate_pair_audio(
+#         train_dataset,
+#         validate_dataset,
+#         rir_path,
+#         noise_dataset,
+#         outputPath,
+#         use_reverb=True,
+#         sample_rate=16000,
+#         audio_length=8):
+def generate_pair_audio(train_dataset, validate_dataset, conf):
+    rir_path = conf['datasets']['rir_table']        ##using rir from DNS-challenge datasets
+    noise_dataset = conf['datasets']['noise_path']  ##noise from DNS-challenge
+    outputPath = conf['datasets']['output_path']    ##OUTPUT path for saving the generated datasets
+    use_reverb = conf['configs']['use_reverb']
+    sample_rate = conf['configs']['samplerate']
+    audio_length = conf['configs']['audio_length']
 
     csv_path = os.path.join(outputPath, "csv")
     if not os.path.exists(csv_path):
@@ -513,9 +543,9 @@ def generate_pair_audio(train_dataset, validate_dataset, rir_path, noise_dataset
 
 
 
-    rir_dict = get_rir_dict(rir_path)
+    rir_dict = get_rir_dict(rir_path, conf)
 
-    #TODO: clean it up, make it in a function
+    # TODO: clean it up, make it in a function
     for i in range(len(validate_dataset)):
         print("validate = ", count)
         validate_data_pair = validate_dataset[i]
@@ -528,24 +558,40 @@ def generate_pair_audio(train_dataset, validate_dataset, rir_path, noise_dataset
         validate_farend_speech = np.concatenate([sf.read(wav)[0] for wav in validate_farend_path_sets])
         validate_farend_speech = signal_pad(validate_farend_speech, audio_sample_length)
         samples_rir_ch = get_rir_samples(rir_dict)
-        #TODO: add non-linear function
-        validate_reverb_farend, validate_noreverb_farend = add_pyreverb(validate_farend_speech, samples_rir_ch)
+        validate_reverb_farend, validate_noreverb_farend = add_pyreverb(validate_farend_speech, samples_rir_ch, predelay=conf['configs']['predelay'])
 
-        #TODO 加噪,但有些部分我有争议, 可能不需要对输入做那么多的归一和scaling这个到时候实验看看
-        validate_noise_audio, validate_noise_file, validate_noise_cf = build_noise_audio(noise_dataset, fs=sample_rate, audio_length=audio_length, audio_samples_length=-1)
+        #TODO: 加噪,但有些部分我有争议, 可能不需要对输入做那么多的归一和scaling这个到时候实验看看
+        validate_noise_audio, validate_noise_file, validate_noise_cf = build_noise_audio(noise_dataset,
+                                                                                         fs=sample_rate,
+                                                                                         audio_length=audio_length,
+                                                                                         audio_samples_length=-1,
+                                                                                         silence_length=conf['configs']['silence_length'])
 
 
-        snr = np.random.randint(-5, 20)
+        snr = np.random.randint(conf['configs']['lowerbound_snr'], conf['configs']['upperbound_snr'])
         snr_list.append(snr)
         if use_reverb:
             validate_farend_snr, validate_noise_snr, validate_echo_signal, target_level = segmental_snr_mixer(clean=validate_reverb_farend,
-                                                                                   noise=validate_noise_audio, snr=snr)
+                                                                                                              noise=validate_noise_audio,
+                                                                                                              snr=snr,
+                                                                                                              target_level=conf['configs']['target_level'],
+                                                                                                              clipping_threshold=conf['configs']['clipping_threshold'],
+                                                                                                              target_level_lower=conf['configs']['target_level_lower'],
+                                                                                                              target_level_upper=conf['configs']['target_level_upper'])
         else:
             validate_farend_snr, validate_noise_snr, validate_echo_signal, target_level = segmental_snr_mixer(clean=validate_noreverb_farend,
-                                                                                   noise=validate_noise_audio, snr=snr)
+                                                                                                              noise=validate_noise_audio,
+                                                                                                              snr=snr,
+                                                                                                              target_level=conf['configs']['target_level'],
+                                                                                                              clipping_threshold=conf['configs']['clipping_threshold'],
+                                                                                                              target_level_lower=conf['configs']['target_level_lower'],
+                                                                                                              target_level_upper=conf['configs']['target_level_upper'])
 
-        validate_nearend_mic, validate_nearend_speech2, validate_echo_signal, validate_ser= nearend_farend_mixer(validate_nearend_speech, validate_echo_signal,
-                                                                                                    lowerbound_ser=-10, upperbound_ser=13, clipping_threshold=0.99)
+        validate_nearend_mic, validate_nearend_speech2, validate_echo_signal, validate_ser= nearend_farend_mixer(validate_nearend_speech,
+                                                                                                                 validate_echo_signal,
+                                                                                                                 lowerbound_ser=conf['configs']['lowerbound_ser'],
+                                                                                                                 upperbound_ser=conf['configs']['upperbound_ser'],
+                                                                                                                 clipping_threshold=conf['configs']['clipping_threshold'])
         ser_list.append(validate_ser)
         nearend_data_path = os.path.join(nearend_speech_out, "nearend_speech_fileid_{}.wav".format(count))
         farend_data_path = os.path.join(farend_speech_out, "farend_speech_fileid_{}.wav".format(count))
@@ -568,7 +614,7 @@ def generate_pair_audio(train_dataset, validate_dataset, rir_path, noise_dataset
         hyphen = '-'
         noise_source_filenamesonly = [i[:-4].split(os.path.sep)[-1] for i in validate_noise_file]
 
-        noise_file_name.append(hyphen.join(noise_source_filenamesonly)[:50])
+        noise_file_name.append(hyphen.join(noise_source_filenamesonly)[:MAXFILELEN])
         farend_speech_name_1.append(validate_farend_path_sets[0])
         farend_speech_name_2.append(validate_farend_path_sets[1])
         farend_speech_name_3.append(validate_farend_path_sets[2])
@@ -595,20 +641,39 @@ def generate_pair_audio(train_dataset, validate_dataset, rir_path, noise_dataset
 
             farend_speech = signal_pad(farend_speech, audio_sample_length)
             samples_rir_ch = get_rir_samples(rir_dict)
-            #TODO add non-linear function
-            reverb_farend, noreverb_farend = add_pyreverb(farend_speech, samples_rir_ch)
+            reverb_farend, noreverb_farend = add_pyreverb(farend_speech, samples_rir_ch, predelay=conf['configs']['predelay'])
             #noise_sample, noise_sr = sf.read(noise_files[np.random.randint(0, np.size(noise_files))])
-            noise_audio, noise_file, noise_cf = build_noise_audio(noise_dataset, fs=sample_rate, audio_length=audio_length, audio_samples_length=-1)
+            noise_audio, noise_file, noise_cf = build_noise_audio(noise_dataset,
+                                                                  fs=sample_rate,
+                                                                  audio_length=audio_length,
+                                                                  audio_samples_length=-1,
+                                                                  silence_length=conf['configs']['silence_length'])
 
-
-            snr = np.random.randint(-5, 20)
+            snr = np.random.randint(conf['configs']['lowerbound_snr'], conf['configs']['upperbound_snr'])
             snr_list.append(snr)
             if use_reverb:
-                farend_snr, noise_snr, echo_signal, target_level = segmental_snr_mixer(clean=reverb_farend, noise=noise_audio, snr=snr)
-            else:
-                farend_snr, noise_snr, echo_signal, target_level = segmental_snr_mixer(clean=noreverb_farend, noise=noise_audio, snr=snr)
+                farend_snr, noise_snr, echo_signal, target_level = segmental_snr_mixer(clean=reverb_farend,
+                                                                                       noise=noise_audio,
+                                                                                       snr=snr,
+                                                                                       target_level=conf['configs']['target_level'],
+                                                                                       clipping_threshold=conf['configs']['clipping_threshold'],
+                                                                                       target_level_lower=conf['configs']['target_level_lower'],
+                                                                                       target_level_upper=conf['configs']['target_level_upper'])
 
-            nearend_mic, nearend_speech2, echo_signal, ser = nearend_farend_mixer(nearend_speech, echo_signal, lowerbound_ser=-10, upperbound_ser=13, clipping_threshold=0.99)
+            else:
+                farend_snr, noise_snr, echo_signal, target_level = segmental_snr_mixer(clean=noreverb_farend,
+                                                                                       noise=noise_audio,
+                                                                                       snr=snr,
+                                                                                       target_level=conf['configs']['target_level'],
+                                                                                       clipping_threshold=conf['configs']['clipping_threshold'],
+                                                                                       target_level_lower=conf['configs']['target_level_lower'],
+                                                                                       target_level_upper=conf['configs']['target_level_upper'])
+
+            nearend_mic, nearend_speech2, echo_signal, ser = nearend_farend_mixer(nearend_speech,
+                                                                                  echo_signal,
+                                                                                  lowerbound_ser=conf['configs']['lowerbound_ser'],
+                                                                                  upperbound_ser=conf['configs']['upperbound_ser'],
+                                                                                  clipping_threshold=conf['configs']['clipping_threshold'])
             ser_list.append(ser)
             #print("%%%%%%%%%%%Processing fileid%%%%%%%%%%%: {}".format(count))
 
@@ -633,7 +698,7 @@ def generate_pair_audio(train_dataset, validate_dataset, rir_path, noise_dataset
             hyphen = '-'
             noise_source_filenamesonly = [i[:-4].split(os.path.sep)[-1] for i in noise_file]
 
-            noise_file_name.append(hyphen.join(noise_source_filenamesonly)[:50])
+            noise_file_name.append(hyphen.join(noise_source_filenamesonly)[:MAXFILELEN])
             farend_speech_name_1.append(three_farend_sets[0])
             farend_speech_name_2.append(three_farend_sets[1])
             farend_speech_name_3.append(three_farend_sets[2])
@@ -644,23 +709,31 @@ def generate_pair_audio(train_dataset, validate_dataset, rir_path, noise_dataset
     print(len(nearend_speech_name), len(farend_speech_name_1), len(farend_speech_name_2), len(farend_speech_name_3), len(noise_file_name), len(filed_id), len(snr_list), len(ser_list))
     dataFrame = pd.DataFrame({'nearend_speech_path': nearend_speech_name, 'farend_speech_path_1':farend_speech_name_1, 'farend_speech_path_2': farend_speech_name_2,
                               'farend_speech_path_3': farend_speech_name_3, 'noise_file_path':noise_file_name, 'filed_id':filed_id, 'snr':snr_list, 'ser':ser_list})
-    dataFrame.to_csv(os.path.join(csv_path, 'train.csv'), index=False, sep=',')
+    dataFrame.to_csv(os.path.join(csv_path, conf['configs']['csv_file_name']), index=False, sep=',')
 
 
-def main():
+def main(args):
     #TODO: This is a draft procesing script, will update and make it clean after
     #
+    with open(args.conf, "r") as f:
+        conf = json.load(f)
 
-    dataPath = "/home/yongyug/data/timit/TIMIT"
-    noisePath = "/home/yongyug/data/aec_challenge/datasets/noise"                               ##noise from DNS-challenge
-    outPath = "/home/yongyug/data/timit_aec_output"                                             ##OUTPUT path for saving the generated datasets
-    rirPath = "/home/yongyug/data/aec_challenge/datasets/acoustic_params/RIR_table_simple.csv"  ##using rir from DNS-challenge datasets
 
-    train_dataset, validate_dataset = get_data_pair(dataPath, repeat_enable=True, samle_gender_pair=30, diff_gender_pair=40)
-    generate_pair_audio(train_dataset, validate_dataset, rirPath, noisePath, outPath, sample_rate=16000, audio_length=8)
+    train_dataset, validate_dataset = get_data_pair(conf['datasets']['timit_data_path'],
+                                                    repeat_enable=conf['configs']['repeat_enable'],
+                                                    samle_gender_pair=conf['configs']['samle_gender_pair'],
+                                                    diff_gender_pair=conf['configs']['diff_gender_pair'])
+    generate_pair_audio(train_dataset, validate_dataset, conf)
 
-    #output_audio, files_used, clipped_files = build_noise_audio(noisePath, fs=16000, audio_length=8, audio_samples_length=-1)
-    #print(files_used)
-    #print(output_audio)
-
-main()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description="Configuration for timit data preparation"
+    )
+    parser.add_argument(
+        "-conf",
+        type=str,
+        required=True,
+        help="configuration for timit data preparation"
+    )
+    args = parser.parse_args()
+    main(args)

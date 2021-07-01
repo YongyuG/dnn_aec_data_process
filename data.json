@@ -1,0 +1,31 @@
+{
+  "datasets": {
+    "timit_data_path": "/home/yongyug/data/timit/TIMIT",
+    "noise_path": "/home/yongyug/data/aec_challenge/datasets/noise",
+    "rir_table": "/home/yongyug/data/aec_challenge/datasets/acoustic_params/RIR_table_simple.csv",
+    "output_path": "/home/yongyug/data/timit_aec_output"
+  },
+  "configs": {
+    "audio_length": 8,
+    "samplerate": 16000,
+    "use_reverb": true,
+    "clipping_threshold": 0.99,
+    "lowerbound_ser": -10,
+    "upperbound_ser": 13,
+    "lowerbound_snr": -5,
+    "upperbound_snr": 20,
+    "target_level_lower": -35,
+    "target_level_upper": -15,
+    "target_level": -25,
+    "lower_t60": 0.6,
+    "upper_t60": 1.3,
+    "repeat_enable": true,
+    "samle_gender_pair": 30,
+    "diff_gender_pair": 40,
+    "predelay": 50,
+    "silence_length": 0.2,
+    "csv_file_name": "train.csv"
+
+  }
+
+}
