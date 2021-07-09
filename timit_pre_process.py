@@ -24,46 +24,49 @@ MAXFILELEN = 50
 # random.seed(9999)
 EPS = np.finfo(float).eps
 
-def get_single_gender_index_list(data_list, repeat_enable=False, num_pair=30):    #获取不重复的单性别说话人对
+def get_single_gender_index_list(data_list, num_pair=30):    #获取不重复的单性别说话人对
     index_list = []
     seen_list = []
     i = 0
     while i < num_pair:
         index_set = list(np.random.randint(0, len(data_list), 2))
-        if repeat_enable:
-            if index_set not in index_list and index_set[::-1] not in index_list:
-                index_list.append(index_set)
-                i += 1
-        else:
-            if index_set[0] not in seen_list and index_set[1] not in seen_list:
-                index_list.append(index_set)
-                seen_list.append(index_set[0])
-                seen_list.append(index_set[1])
 
-                i += 1
+        if index_set[0] not in seen_list and index_set[1] not in seen_list:
+            index_list.append(index_set)
+            seen_list.append(index_set[0])
+            seen_list.append(index_set[1])
 
-    return index_list
+            i += 1
 
-def get_double_gender_index_list(male_list, female_list, repeat_enable=False, num_pair=40):
+    return index_list, seen_list
+
+def get_double_gender_index_list(male_list, female_list, male_seen_list, female_seenlist, num_pair=40):
     male_female_index_list = []
-    seen_list = []
 
     i = 0
     while i < num_pair:
         male_index = np.random.randint(0, len(male_list))
         female_index = np.random.randint(0, len(female_list))
         index_set = [male_index, female_index]
-        if repeat_enable:
-            if index_set not in male_female_index_list:
-                male_female_index_list.append(index_set)
-                i += 1
-        else:
-            if male_index not in seen_list and female_index not in seen_list:
-                male_female_index_list.append(index_set)
-                seen_list.append(male_index)
-                seen_list.append(female_index)
-                i += 1
-    return male_female_index_list
+
+        if male_index not in male_seen_list and female_index not in female_seenlist:
+            male_female_index_list.append(index_set)
+            male_seen_list.append(male_index)
+            female_seenlist.append(female_index)
+            i += 1
+    return male_female_index_list, male_seen_list, female_seenlist
+
+def get_gender_index_list(male_list, female_list, conf):
+    # male_male_index_list = []
+    # female_female_index_list = []
+    # male_female_index_list = []
+    male_seen_list = []
+    female_seen_list = []
+
+    male_male_index_list, temp_male_seenlist = get_single_gender_index_list(male_list, conf['configs']['samle_gender_pair'])
+    female_female_index_list, temp_female_seenlist = get_single_gender_index_list(male_list, conf['configs']['samle_gender_pair'])
+    male_female_index_list, male_seen_list, female_seen_list = get_double_gender_index_list(male_list, female_list, temp_male_seenlist, temp_female_seenlist, conf['configs']['diff_gender_pair'])
+    return male_male_index_list, female_female_index_list, male_female_index_list
 
 
 def random_three_nonrepeat_sample(data_len):
@@ -120,6 +123,7 @@ def generate_gender_wav_pair(nearend_data_list, farend_data_list, data_dict1, da
 
     train_res_list = []
     validate_res_list = []
+    test_res_list = []
     count = 0
     for i in range(len(nearend_data_list)):
         nearend_spk = nearend_data_list[i]
@@ -138,29 +142,40 @@ def generate_gender_wav_pair(nearend_data_list, farend_data_list, data_dict1, da
         np.random.shuffle(nearend_select_index)  # for nearend_spk in nearend_spk_list:
 
         nearend_wav_pick = np.array(nearend_spk_wav)[nearend_select_index]
-        farend_group = [[i for i in range(j * 5, (j + 1) * 5)] for j in range(len(nearend_select_index))]  # 这里是对于nearend来说, 渠道每个wav对应farend的index
+        if pairname.upper() == 'TRAIN':
+            farend_group = [[i for i in range(j * 5, (j + 1) * 5)] for j in range(len(nearend_select_index))]  # 这里是对于nearend来说, 渠道每个wav对应farend的index
+        elif pairname.upper() == 'TEST':
+            farend_group = [[i for i in range(j * 1, (j + 1) * 1)] for j in range(len(nearend_select_index))]  # 这里是对于nearend来说, 渠道每个wav对应farend的index
+
         random.shuffle(farend_three_sample_index)  # 把farend的三元list随机一下
         farend_select_index = np.array(farend_three_sample_index)[np.array(farend_group)]  # 把每个nearend选择的farend取出来
         farend_wav_pick = np.array(farend_spk_wav)[farend_select_index]
+        if pairname.upper() == 'TRAIN':
+            for k in range(len(nearend_wav_pick)):
+                if k < 7:
+                    count += 1
+                    #print(nearend_wav_pick[k], farend_wav_pick[k])
+                    train_res_list.append((nearend_wav_pick[k], farend_wav_pick[k]))
 
-        for k in range(len(nearend_wav_pick)):
-            if k < 7:
-                count += 1
-                #print(nearend_wav_pick[k], farend_wav_pick[k])
-                train_res_list.append((nearend_wav_pick[k], farend_wav_pick[k]))
+                else:
+                    validate_res_list.append((nearend_wav_pick[k], farend_wav_pick[k]))
+        else:
+            for k in range(len(nearend_wav_pick)):
+                test_res_list.append((nearend_wav_pick[k], farend_wav_pick[k]))
+    if pairname.upper() == 'TRAIN':
+        return train_res_list, validate_res_list
+    else:
+        return test_res_list
 
-            else:
-                validate_res_list.append((nearend_wav_pick[k], farend_wav_pick[k]))
-    #print(validate_res_list)
-    return train_res_list, validate_res_list
+def add_nonlinear_distortion(signal):
+    pass
 
 
 
 def get_data_pair(
         dataPath,
-        repeat_enable=True,
-        samle_gender_pair=30,
-        diff_gender_pair=40):
+        conf,
+        ):
 
     male_dict = {}
     female_dict = {}
@@ -186,45 +201,90 @@ def get_data_pair(
 
     male_name_list = list(male_dict.keys())
     female_name_list = list(female_dict.keys())
-
+    male_name_index_list = [i for i in range(len(male_name_list))]
+    female_name_index_list = [i for i in range(len(female_name_list))]
 
     #Randomize coresponding data-pairs, get the speaker idx from the list
-    male_male_index_list = get_single_gender_index_list(male_name_list, repeat_enable=repeat_enable, num_pair=samle_gender_pair)
+    train_male_male_index_list, temp_maleseen = get_single_gender_index_list(male_name_list, num_pair=conf["configs"]['test']['same_gender_pair'])
+    train_female_female_index_list, temp_female_seen = get_single_gender_index_list(female_name_list, num_pair=conf["configs"]['test']['same_gender_pair'])
+    train_male_female_index_list, male_seen_list, female_seen_list = get_double_gender_index_list(male_name_list, female_name_list, temp_maleseen, temp_female_seen, num_pair=conf["configs"]['test']['diff_gender_pair'])
+    #get_gender_index_list can use this function to get this three list
 
-    female_female_index_list = get_single_gender_index_list(female_name_list, repeat_enable=repeat_enable, num_pair=samle_gender_pair)
-    male_female_index_list = get_double_gender_index_list(male_name_list, female_name_list, repeat_enable=repeat_enable, num_pair=diff_gender_pair)
+    #Get the remain speaker index for test sets
+    rest_male_list = [i for i in male_name_index_list if i not in male_seen_list]
+    rest_female_list = [i for i in female_name_index_list if i not in female_seen_list]
+    test_male_male_index_list, temp_maleseen = get_single_gender_index_list(rest_male_list, num_pair=conf["configs"]['test']['same_gender_pair'])
+    test_female_female_index_list, temp_female_seen = get_single_gender_index_list(rest_female_list, num_pair=conf["configs"]['test']['same_gender_pair'])
+    test_male_female_index_list, male_seen_list, female_seen_list = get_double_gender_index_list(rest_male_list, rest_female_list, temp_maleseen, temp_female_seen, num_pair=conf["configs"]['test']['diff_gender_pair'])
 
     #Randomize which speaker as for farend spk
-    male_female_farend_choice = np.random.randint(0, 2, len(male_female_index_list)) #这里是随机选择pair中哪一个spk当作farend
-    male_male_farend_choice = np.random.randint(0, 2, len(male_male_index_list))
-    female_female_farend_choice = np.random.randint(0, 2, len(female_female_index_list))
+    train_male_female_farend_choice = np.random.randint(0, 2, len(train_male_female_index_list)) #这里是随机选择pair中哪一个spk当作farend
+    train_male_male_farend_choice = np.random.randint(0, 2, len(train_male_male_index_list))
+    train_female_female_farend_choice = np.random.randint(0, 2, len(train_female_female_index_list))
 
-    #Get the speaker name from data-pair
+    test_male_female_farend_choice = np.random.randint(0, 2, len(test_male_female_index_list)) #这里是随机选择pair中哪一个spk当作farend
+    test_male_male_farend_choice = np.random.randint(0, 2, len(test_male_male_index_list))
+    test_female_female_farend_choice = np.random.randint(0, 2, len(test_female_female_index_list))
+
+
+    # print(male_male_index_list)
+    # print(male_female_index_list)
+    # for i in male_male_index_list:
+    #     for j in male_female_index_list:
+    #         if i[0] == j[0] or i[1] == j[0]:
+    #             print(i,j)
+    # print(female_female_index_list)
+    # print(male_female_index_list)
+    # for i in female_female_index_list:
+    #     for j in male_female_index_list:
+    #         if i[0] == j[1] or i[1] == j[1]:
+    #             print(i,j)
+
+
+    #Get the speaker name from training and testdata-pair
     male_name_arr = np.array(male_name_list)
-    male_name_arr = male_name_arr[np.array(male_male_index_list)]
+    test_male_name_arr = male_name_arr[np.array(test_male_male_index_list)]
+    train_male_name_arr = male_name_arr[np.array(train_male_male_index_list)]
+
     female_name_arr = np.array(female_name_list)
-    female_name_arr = female_name_arr[np.array(female_female_index_list)]
-    male_female_name_arr = np.array([np.array(male_name_list)[np.array(male_female_index_list).T[0]],
-                        np.array(female_name_list)[np.array(male_female_index_list).T[1]]]).T  #转置是为了把male和female分开, 因为male_female_index_list是 [male, female顺序排列的]
+    test_female_name_arr = female_name_arr[np.array(test_female_female_index_list)]
+    train_female_name_arr = female_name_arr[np.array(train_female_female_index_list)]
+
+    train_male_female_name_arr = np.array([np.array(male_name_list)[np.array(train_male_female_index_list).T[0]],
+                        np.array(female_name_list)[np.array(train_male_female_index_list).T[1]]]).T  #转置是为了把male和female分开, 因为male_female_index_list是 [male, female顺序排列的]
+    test_male_female_name_arr = np.array([np.array(male_name_list)[np.array(test_male_female_index_list).T[0]],
+                        np.array(female_name_list)[np.array(test_male_female_index_list).T[1]]]).T  #转置是为了把male和female分开, 因为male_female_index_list是 [male, female顺序排列的]
 
 
-    #Get specific farend and nearend speaker key
-    male_male_nearend_spk_list = [male_name_arr[i][male_male_farend_choice[i] ^ 1] for i in range(len(male_name_arr))]
-    male_male_farend_spk_list = [male_name_arr[i][male_male_farend_choice[i]] for i in range(len(male_name_arr))]
-    female_female_nearend_spk_list = [female_name_arr[i][female_female_farend_choice[i] ^ 1] for i in range(len(female_name_arr))]
-    female_female_farend_spk_list = [female_name_arr[i][female_female_farend_choice[i]] for i in range(len(female_name_arr))]
-    male_female_nearend_spk_list = [male_female_name_arr[i][male_female_farend_choice[i] ^ 1] for i in range(len(male_female_name_arr))]
-    male_female_farend_spk_list = [male_female_name_arr[i][male_female_farend_choice[i]] for i in range(len(male_female_name_arr))]
+    #Get specific farend and nearend speaker key for training sets
+    train_male_male_nearend_spk_list = [train_male_name_arr[i][train_male_male_farend_choice[i] ^ 1] for i in range(len(train_male_name_arr))]
+    train_male_male_farend_spk_list = [train_male_name_arr[i][train_male_male_farend_choice[i]] for i in range(len(train_male_name_arr))]
+    train_female_female_nearend_spk_list = [train_female_name_arr[i][train_female_female_farend_choice[i] ^ 1] for i in range(len(train_female_name_arr))]
+    train_female_female_farend_spk_list = [train_female_name_arr[i][train_female_female_farend_choice[i]] for i in range(len(train_female_name_arr))]
+    train_male_female_nearend_spk_list = [train_male_female_name_arr[i][train_male_female_farend_choice[i] ^ 1] for i in range(len(train_male_female_name_arr))]
+    train_male_female_farend_spk_list = [train_male_female_name_arr[i][train_male_female_farend_choice[i]] for i in range(len(train_male_female_name_arr))]
 
+    test_male_male_nearend_spk_list = [test_male_name_arr[i][test_male_male_farend_choice[i] ^ 1] for i in range(len(test_male_name_arr))]
+    test_male_male_farend_spk_list = [test_male_name_arr[i][test_male_male_farend_choice[i]] for i in range(len(test_male_name_arr))]
+    test_female_female_nearend_spk_list = [test_female_name_arr[i][test_female_female_farend_choice[i] ^ 1] for i in range(len(test_female_name_arr))]
+    test_female_female_farend_spk_list = [test_female_name_arr[i][test_female_female_farend_choice[i]] for i in range(len(test_female_name_arr))]
+    test_male_female_nearend_spk_list = [test_male_female_name_arr[i][test_male_female_farend_choice[i] ^ 1] for i in range(len(test_male_female_name_arr))]
+    test_male_female_farend_spk_list = [test_male_female_name_arr[i][test_male_female_farend_choice[i]] for i in range(len(test_male_female_name_arr))]
 
     #Generate specifc wav_pair for each data_pair
-    male_male_train, male_male_validate = generate_gender_wav_pair(male_male_nearend_spk_list, male_male_farend_spk_list, male_dict, male_dict, 'male_male')
-    female_female_train, female_female_validate = generate_gender_wav_pair(female_female_nearend_spk_list, female_female_farend_spk_list , female_dict, female_dict,'female_female')
-    male_female_train, male_female_validate = generate_gender_wav_pair(male_female_nearend_spk_list, male_female_farend_spk_list, male_dict, female_dict, 'male_female')
+    male_male_train, male_male_validate = generate_gender_wav_pair(train_male_male_nearend_spk_list, train_male_male_farend_spk_list, male_dict, male_dict, 'train')
+    female_female_train, female_female_validate = generate_gender_wav_pair(train_female_female_nearend_spk_list, train_female_female_farend_spk_list , female_dict, female_dict,'train')
+    male_female_train, male_female_validate = generate_gender_wav_pair(train_male_female_nearend_spk_list, train_male_female_farend_spk_list, male_dict, female_dict, 'train')
+
+    male_male_test = generate_gender_wav_pair(test_male_male_nearend_spk_list, test_male_male_farend_spk_list, male_dict, male_dict, 'test')
+    female_female_test = generate_gender_wav_pair(test_female_female_nearend_spk_list, test_female_female_farend_spk_list , female_dict, female_dict,'test')
+    male_female_test = generate_gender_wav_pair(test_male_female_nearend_spk_list, test_male_female_farend_spk_list, male_dict, female_dict, 'test')
 
     train_dataset = male_male_train + female_female_train + male_female_train
     validate_dataset = male_male_validate + female_female_validate + male_female_validate
-    return train_dataset, validate_dataset
+    test_dataset = male_male_test + female_female_test + male_female_test
+
+    return train_dataset, validate_dataset, test_dataset
 
     #all 3-type pairs will be merged in male_male_final_data with both train and validate
 
@@ -509,7 +569,9 @@ def generate_pair_audio(train_dataset, validate_dataset, conf):
     use_reverb = conf['configs']['use_reverb']
     sample_rate = conf['configs']['samplerate']
     audio_length = conf['configs']['audio_length']
-
+    outputPath = os.path.join(outputPath, 'train')
+    if not os.path.exists(outputPath):
+        os.makedirs(outputPath)
     csv_path = os.path.join(outputPath, "csv")
     if not os.path.exists(csv_path):
         os.makedirs(csv_path)
@@ -554,7 +616,6 @@ def generate_pair_audio(train_dataset, validate_dataset, conf):
         validate_nearend_speech, validate_sr = sf.read(validate_nearend_path)
         assert validate_sr == sample_rate
         validate_nearend_speech = signal_pad(validate_nearend_speech, audio_sample_length)
-
         validate_farend_speech = np.concatenate([sf.read(wav)[0] for wav in validate_farend_path_sets])
         validate_farend_speech = signal_pad(validate_farend_speech, audio_sample_length)
         samples_rir_ch = get_rir_samples(rir_dict)
@@ -719,10 +780,9 @@ def main(args):
         conf = json.load(f)
 
 
-    train_dataset, validate_dataset = get_data_pair(conf['datasets']['timit_data_path'],
-                                                    repeat_enable=conf['configs']['repeat_enable'],
-                                                    samle_gender_pair=conf['configs']['samle_gender_pair'],
-                                                    diff_gender_pair=conf['configs']['diff_gender_pair'])
+    train_dataset, validate_dataset, test_dataset = get_data_pair(conf['datasets']['timit_data_path'],
+                                                    conf
+                                                    )
     generate_pair_audio(train_dataset, validate_dataset, conf)
 
 if __name__ == '__main__':
