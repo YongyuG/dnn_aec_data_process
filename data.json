@@ -19,12 +19,18 @@
     "target_level": -25,
     "lower_t60": 0.6,
     "upper_t60": 1.3,
-    "repeat_enable": true,
-    "samle_gender_pair": 30,
-    "diff_gender_pair": 40,
     "predelay": 50,
     "silence_length": 0.2,
-    "csv_file_name": "train.csv"
+    "train": {
+      "same_gender_pair": 30,
+      "diff_gender_pair": 40,
+      "csv_file_name": "train.csv"
+    },
+    "test": {
+      "same_gender_pair": 3,
+      "diff_gender_pair": 4,
+      "csv_file_name": "test.csv"
+    }
 
   }
 
