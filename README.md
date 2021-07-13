@@ -32,3 +32,4 @@ Last Modification
 
 1. add json
 2. randomly pad signal to certain length
+3. add non-linear
