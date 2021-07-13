@@ -167,8 +167,26 @@ def generate_gender_wav_pair(nearend_data_list, farend_data_list, data_dict1, da
     else:
         return test_res_list
 
-def add_nonlinear_distortion(signal):
-    pass
+def add_nonlinear_distortion(farend_signal, hard=True):
+    x_max = np.max(np.abs(farend_signal))
+
+    if hard:
+        farend_signal[farend_signal < -x_max] = -x_max
+        farend_signal[farend_signal > x_max] = x_max
+        xn = farend_signal
+    else:
+
+        x_soft = (x_max * farend_signal) / ((np.abs(x_max) ** 2 + np.abs(farend_signal) ** 2) ** (1 / 2))
+        xn = x_soft
+
+
+
+    sigmoid_gian = 0.4
+    bn = 1.5 * xn - 0.3 * xn ** 2
+    alpha = [4 if i > 0 else 0.5 for i in bn]
+    x_nl = sigmoid_gian * ((2 / (1 + np.exp(alpha * bn))) - 1)
+
+    return x_nl
 
 
 
