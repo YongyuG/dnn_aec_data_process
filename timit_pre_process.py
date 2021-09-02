@@ -168,7 +168,9 @@ def generate_gender_wav_pair(nearend_data_list, farend_data_list, data_dict1, da
         return test_res_list
 
 def add_nonlinear_distortion(farend_signal, hard=True):
-    x_max = np.max(np.abs(farend_signal))
+    #x_max = np.max(np.abs(farend_signal))
+    x_max = 0.8 ### x_max is the maximum value of output signal
+                ### x_max should be set by yourself
 
     if hard:
         farend_signal[farend_signal < -x_max] = -x_max
