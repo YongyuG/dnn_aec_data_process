@@ -16,7 +16,7 @@ import numpy as np
 from random import shuffle
 import soundfile as sf
 from scipy import signal
-from metric.evaluation import SER
+from evaluation import SER
 
 MAXTRIES = 50
 MAXFILELEN = 50
