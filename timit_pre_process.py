@@ -187,7 +187,7 @@ def add_nonlinear_distortion(farend_signal, hard=True):
 
     sigmoid_gian = 0.4
     bn = 1.5 * xn - 0.3 * xn ** 2
-    alpha = [4 if i > 0 else 0.5 for i in bn]
+    alpha = [-4 if i > 0 else -0.5 for i in bn]
     x_nl = sigmoid_gian * ((2 / (1 + np.exp(alpha * bn))) - 1)
 
     return x_nl
